@@ -3,14 +3,13 @@ pipeline {
 
     environment {
         APP_PORT = '9090'
-        JOB_NAME = "${env.JOB_NAME}"
     }
 
     stages {
 
         stage('Build') {
             steps {
-                echo "Job name: ${JOB_NAME}"
+                echo "Job name: ${env.JOB_NAME}"
                 sh 'mvn clean package'
             }
         }
@@ -24,7 +23,7 @@ pipeline {
                             try {
                                 timeout(time: 60, unit: 'SECONDS') {
                                     dir('target') {
-                                        sh "java -jar *.jar --server.port=${APP_PORT} &"
+                                        sh "java -jar *.jar --server.port=${APP_PORT}"
                                     }
                                 }
                             } catch (err) {
@@ -53,7 +52,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished for job: ${JOB_NAME}"
+            echo "Pipeline finished for job: ${env.JOB_NAME}"
         }
     }
 }
