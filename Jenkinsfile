@@ -9,6 +9,7 @@ pipeline {
 
         stage('Build') {
             steps {
+                echo "Building project..."
                 echo "Job name: ${env.JOB_NAME}"
                 sh 'mvn clean package'
             }
@@ -17,13 +18,20 @@ pipeline {
         stage('Run Application') {
             steps {
                 script {
-                    sh "java -jar target/*.jar --server.port=${APP_PORT} &"
-                    sleep 10
+                    try {
+                        timeout(time: 60, unit: 'SECONDS') {
+                            dir('target') {
+                                sh "java -jar *.jar --server.port=${APP_PORT}"
+                            }
+                        }
+                    } catch (err) {
+                        echo "Application stopped or timed out: ${err}"
+                    }
                 }
             }
         }
 
-        stage('Integration Test') {
+        stage('Integration Test (RestIT)') {
             steps {
                 script {
                     try {
@@ -31,7 +39,8 @@ pipeline {
                             sh 'mvn test -Dtest=RestIT'
                         }
                     } catch (err) {
-                        echo "Tests failed or timed out: ${err}"
+                        echo "Integration tests failed or timed out: ${err}"
+                        error("Tests failed")
                     }
                 }
             }
@@ -41,6 +50,12 @@ pipeline {
     post {
         always {
             echo "Pipeline finished for job: ${env.JOB_NAME}"
+        }
+        success {
+            echo "BUILD SUCCESS"
+        }
+        failure {
+            echo "BUILD FAILURE"
         }
     }
 }
