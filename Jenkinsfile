@@ -2,68 +2,36 @@ pipeline {
     agent any
 
     environment {
-        APPPORT = '9090'
+        APP_PORT = '9090'
     }
 
     stages {
+
         stage('Build') {
             steps {
-                echo "Building project..."
-                echo "Job name: ${env.JOBNAME}"
+                echo "Job name: ${env.JOB_NAME}"
                 sh 'mvn clean package'
             }
         }
 
-        stage('Check Logs for FAILURE') {
+        stage('Run Application') {
             steps {
                 script {
-                    def logFile = "/local/jenkinsHome/jobs/job/builds/1/log"
-                    def failureDetected = false
-                    try {
-                        sh "grep -q \"FAILURE\" ${logFile}"
-                        failureDetected = true
-                    } catch (err) {
-                        failureDetected = false
-                    }
-                    if (failureDetected) {
-                        echo "WARNING: 'FAILURE' found in log file."
-                    } else {
-                        echo "No 'FAILURE' found in log file."
-                    }
+                    sh "java -jar target/*.jar --server.port=${APP_PORT} &"
+                    sleep 10
                 }
             }
         }
 
-        stage('Integration Test (Parallel)') {
-            parallel {
-
-                stage('Running Application') {
-                    steps {
-                        script {
-                            try {
-                                timeout(time: 60, unit: 'SECONDS') {
-                                    dir('target') {
-                                        sh "java -jar *.jar --server.port=${APPPORT}"
-                                    }
-                                }
-                            } catch (err) {
-                                echo "Application stopped or timed out: ${err}"
-                            }
+        stage('Integration Test') {
+            steps {
+                script {
+                    try {
+                        timeout(time: 30, unit: 'SECONDS') {
+                            sh 'mvn test -Dtest=RestIT'
                         }
-                    }
-                }
-
-                stage('Running REST IT Tests') {
-                    steps {
-                        script {
-                            try {
-                                timeout(time: 30, unit: 'SECONDS') {
-                                    sh 'mvn test -Dtest=RestIT'
-                                }
-                            } catch (err) {
-                                echo "Integration tests failed or timed out: ${err}"
-                            }
-                        }
+                    } catch (err) {
+                        echo "Tests failed or timed out: ${err}"
                     }
                 }
             }
@@ -72,7 +40,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished for job: ${env.JOBNAME}"
+            echo "Pipeline finished for job: ${env.JOB_NAME}"
         }
     }
 }
