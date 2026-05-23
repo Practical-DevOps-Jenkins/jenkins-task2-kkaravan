@@ -9,12 +9,13 @@ pipeline {
 
         stage('Build') {
             steps {
+                echo "Building project..."
                 echo "Job name: ${env.JOB_NAME}"
                 sh 'mvn clean package'
             }
         }
 
-        stage('Integration Test') {
+        stage('Integration Test (Parallel)') {
             parallel {
 
                 stage('Running Application') {
@@ -33,7 +34,7 @@ pipeline {
                     }
                 }
 
-                stage('Running Test') {
+                stage('Running REST IT Tests') {
                     steps {
                         script {
                             try {
