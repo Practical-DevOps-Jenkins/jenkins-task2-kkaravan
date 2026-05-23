@@ -15,18 +15,20 @@ pipeline {
             }
         }
 
-        stage('Run Application') {
+        stage('Start Application') {
             steps {
                 script {
-                    try {
-                        timeout(time: 60, unit: 'SECONDS') {
-                            dir('target') {
-                                sh "java -jar *.jar --server.port=${APP_PORT}"
-                            }
+                    // запускаємо застосунок у background
+                    sh "java -jar target/*.jar --server.port=${APP_PORT} > app.log 2>&1 &"
+
+                    // чекаємо поки порт стане доступний
+                    timeout(time: 60, unit: 'SECONDS') {
+                        waitUntil {
+                            sh(script: "nc -z localhost ${APP_PORT}", returnStatus: true) == 0
                         }
-                    } catch (err) {
-                        echo "Application stopped or timed out: ${err}"
                     }
+
+                    echo "Application is up on port ${APP_PORT}"
                 }
             }
         }
