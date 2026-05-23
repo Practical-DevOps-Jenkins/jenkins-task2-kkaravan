@@ -3,14 +3,21 @@ pipeline {
 
     environment {
         APP_PORT = '9090'
+        APP_URL = "http://localhost:${APP_PORT}"
     }
 
     stages {
 
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Build') {
             steps {
-                echo "Job: ${env.JOB_NAME}"
-                sh 'mvn clean package'
+                echo "Building project..."
+                sh 'mvn clean package -DskipTests'
             }
         }
 
@@ -18,30 +25,34 @@ pipeline {
             steps {
                 script {
 
-                    // запускаємо Spring Boot
-                    sh "java -jar target/*.jar --server.port=${APP_PORT} > app.log 2>&1 &"
+                    // запускаємо app у background
+                    sh """
+                        nohup java -jar target/*.jar \
+                        --server.port=${APP_PORT} \
+                        > app.log 2>&1 &
+                        echo \$! > app.pid
+                    """
 
-                    // даємо час на старт (простий і стабільний варіант)
-                    sleep 20
+                    // ЧЕКАЄМО ПОКИ APP РЕАЛЬНО ПІДНЯВСЯ
+                    timeout(time: 90, unit: 'SECONDS') {
+                        waitUntil {
+                            sh(script: "curl -sf ${APP_URL}/actuator/health > /dev/null", returnStatus: true) == 0
+                        }
+                    }
 
-                    // перевіряємо лог (корисно для дебагу)
-                    sh 'echo "=== APP LOG START ==="'
-                    sh 'cat app.log || true'
-                    sh 'echo "=== APP LOG END ==="'
+                    echo "Application is UP"
                 }
             }
         }
 
-        stage('Integration Test (RestIT)') {
+        stage('Integration Tests') {
             steps {
                 script {
                     try {
-                        timeout(time: 30, unit: 'SECONDS') {
-                            sh 'mvn test -Dtest=RestIT'
-                        }
+                        sh 'mvn test -Dtest=RestIT'
                     } catch (err) {
-                        echo "Integration tests failed or timed out: ${err}"
-                        error("FAIL: RestIT failed")
+                        echo "Tests failed"
+                        error("Integration tests failed")
                     }
                 }
             }
@@ -50,6 +61,18 @@ pipeline {
 
     post {
         always {
+            script {
+                // cleanup app process
+                sh '''
+                    if [ -f app.pid ]; then
+                        kill $(cat app.pid) || true
+                    fi
+                '''
+
+                echo "Logs:"
+                sh 'cat app.log || true'
+            }
+
             echo "Pipeline finished for job: ${env.JOB_NAME}"
         }
 
